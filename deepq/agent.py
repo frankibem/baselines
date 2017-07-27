@@ -1,11 +1,12 @@
 import numpy as np
+from cntk import Value
 from cntk.initializer import he_uniform
 from cntk.layers import Sequential, Convolution2D, Dense, default_options
 from cntk.layers.typing import Tensor
 from cntk.learners import adam, learning_rate_schedule, momentum_schedule, UnitType
 from cntk.logging import TensorBoardProgressWriter
 from cntk.ops import abs, element_select, relu, reduce_sum, square, input_variable, \
-    argmax, reduce_mean, one_hot, minus, less
+    argmax, reduce_mean, one_hot, minus, less, stop_gradient
 from cntk.ops.functions import CloneMethod
 from cntk.train import Trainer
 
@@ -32,13 +33,13 @@ class LearningAgent(object):
         self.update_target()
 
         self.pre_states = input_variable(state_dim, name='pre_states')
-        self.actions = input_variable((), name='actions')
+        self.actions = input_variable(action_dim, name='actions')
         self.post_states = input_variable(state_dim, name='post_states')
         self.rewards = input_variable((), name='rewards')
         self.terminals = input_variable((), name='terminals')
         self.is_weights = input_variable((), name='is_weights')
 
-        predicted_q = reduce_sum(self.model(self.pre_states) * one_hot(self.actions, self.action_dim), axis=0)
+        predicted_q = reduce_sum(self.model(self.pre_states) * self.actions, axis=0)
 
         # DQN - calculate target q values
         # post_q = reduce_max(self.target_model(self.post_states), axis=0)
@@ -47,7 +48,8 @@ class LearningAgent(object):
         online_selection = one_hot(argmax(self.model(self.post_states), axis=0), self.action_dim)
         post_q = reduce_sum(self.target_model(self.post_states) * online_selection, axis=0)
 
-        target_q = self.rewards + self.gamma * post_q
+        post_q = (1.0 - self.terminals) * post_q
+        target_q = stop_gradient(self.rewards + self.gamma * post_q)
 
         # Huber loss
         delta = 1.0
@@ -88,6 +90,7 @@ class LearningAgent(object):
         :param t: Tensor[boolean] True if s_ was a terminal state and false otherwise
         :param w: Tensor[float] Importance sampling weights
         """
+        a = Value.one_hot(a.tolist(), self.action_dim)
         td_error = self.trainer.train_minibatch({
             self.pre_states: s,
             self.actions: a,
