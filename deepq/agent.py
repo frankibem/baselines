@@ -56,7 +56,7 @@ class LearningAgent(object):
         self.td_error = minus(predicted_q, target_q, name='td_error')
         abs_error = abs(self.td_error)
         errors = element_select(less(abs_error, delta), square(self.td_error) * 0.5, delta * (abs_error - 0.5 * delta))
-        loss = reduce_mean(self.is_weights * errors, name='loss')  # weighted error
+        loss = errors * self.is_weights
 
         # Adam based SGD
         lr_schedule = learning_rate_schedule(learning_rate, UnitType.minibatch)
